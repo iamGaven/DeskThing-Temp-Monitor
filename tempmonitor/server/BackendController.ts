@@ -16,12 +16,24 @@ class BackendController {
   private reconnectInterval: number = 30;
   private maxLogs: number = 100;
   private pollInterval: number = 500; // Poll every 500ms to match C# broadcast rate
+  private connectionCheckTimeout: number = 2000; // 2 second timeout for connection checks
+  private consecutiveFailures: number = 0;
+  private maxConsecutiveFailures: number = 3; // Disconnect after 3 consecutive failures
+  
+  // Fast reconnect settings
+  private fastReconnectAttempts: number = 0;
+  private maxFastReconnectAttempts: number = 10; // Try fast reconnects for first 10 attempts
+  private fastReconnectInterval: number = 2; // 2 seconds for fast reconnects
+  private reconnectBackoffMultiplier: number = 1.5; // Exponential backoff multiplier
+  private maxReconnectInterval: number = 30; // Cap at 30 seconds
   
   private connectionStatus: ConnectionStatus = 'disconnected';
   private lastConnected: number | null = null;
+  private lastSuccessfulPoll: number | null = null;
   private lastError: string | null = null;
   private reconnectTimer: ReturnType<typeof setTimeout> | null = null;
   private pollTimer: ReturnType<typeof setInterval> | null = null;
+  private healthCheckTimer: ReturnType<typeof setInterval> | null = null;
   
   private logs: LogEntry[] = [];
 
@@ -71,6 +83,64 @@ class BackendController {
     }
   }
 
+  private async fetchWithTimeout(url: string, timeout: number = this.connectionCheckTimeout): Promise<Response> {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), timeout);
+
+    try {
+      const response = await fetch(url, {
+        method: 'GET',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        signal: controller.signal
+      });
+      clearTimeout(timeoutId);
+      return response;
+    } catch (error) {
+      clearTimeout(timeoutId);
+      throw error;
+    }
+  }
+
+  private handleConnectionLost(reason: string) {
+    if (this.connectionStatus === 'connected') {
+      this.connectionStatus = 'error';
+      this.lastError = reason;
+      this.addLog('error', `Connection lost: ${reason}`);
+      this.sendConnectionStatus();
+      this.stopPolling();
+      this.stopHealthCheck();
+      
+      // Schedule reconnect if auto-connect is enabled
+      if (this.autoConnect) {
+        this.scheduleReconnect();
+      }
+    }
+  }
+
+  private startHealthCheck() {
+    // Stop existing health check if any
+    this.stopHealthCheck();
+
+    // Check connection health every 5 seconds
+    this.healthCheckTimer = setInterval(() => {
+      const now = Date.now();
+      
+      // If we haven't had a successful poll in the last 5 seconds, consider connection lost
+      if (this.lastSuccessfulPoll && (now - this.lastSuccessfulPoll > 5000)) {
+        this.handleConnectionLost('No response from server for 5 seconds');
+      }
+    }, 5000);
+  }
+
+  private stopHealthCheck() {
+    if (this.healthCheckTimer) {
+      clearInterval(this.healthCheckTimer);
+      this.healthCheckTimer = null;
+    }
+  }
+
   public async connect() {
     if (!this.backendUrl) {
       this.addLog('error', 'No backend URL configured');
@@ -87,13 +157,8 @@ class BackendController {
     this.addLog('info', `Connecting to C# backend at ${this.backendUrl}...`);
 
     try {
-      // Test connection by fetching CPU/GPU temps
-      const response = await fetch(`${this.backendUrl}/api/temps/cpu-gpu`, {
-        method: 'GET',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-      });
+      // Test connection by fetching CPU/GPU temps with timeout
+      const response = await this.fetchWithTimeout(`${this.backendUrl}/api/temps/cpu-gpu`);
 
       if (!response.ok) {
         throw new Error(`HTTP ${response.status}: ${response.statusText}`);
@@ -116,7 +181,10 @@ class BackendController {
 
       this.connectionStatus = 'connected';
       this.lastConnected = Date.now();
+      this.lastSuccessfulPoll = Date.now();
       this.lastError = null;
+      this.consecutiveFailures = 0;
+      this.fastReconnectAttempts = 0; // Reset fast reconnect counter on successful connection
       this.addLog('success', `Successfully connected to C# backend at ${this.backendUrl}`);
       this.sendConnectionStatus();
       
@@ -126,12 +194,21 @@ class BackendController {
         this.reconnectTimer = null;
       }
 
-      // Start polling for data
+      // Start polling for data and health monitoring
       this.startPolling();
+      this.startHealthCheck();
       
     } catch (error) {
       this.connectionStatus = 'error';
-      const errorMsg = error instanceof Error ? error.message : String(error);
+      let errorMsg = error instanceof Error ? error.message : String(error);
+      
+      // Provide more specific error messages
+      if (error instanceof Error && error.name === 'AbortError') {
+        errorMsg = `Connection timeout (no response after ${this.connectionCheckTimeout}ms)`;
+      } else if (errorMsg.includes('fetch')) {
+        errorMsg = 'Unable to reach server (network error)';
+      }
+      
       this.lastError = errorMsg;
       this.addLog('error', `Failed to connect to C# backend: ${errorMsg}`);
       this.sendConnectionStatus();
@@ -151,19 +228,18 @@ class BackendController {
 
     const poll = async () => {
       try {
-        // Fetch CPU/GPU temperatures
-        const tempResponse = await fetch(`${this.backendUrl}/api/temps/cpu-gpu`, {
-          method: 'GET',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-        });
+        // Fetch CPU/GPU temperatures with timeout
+        const tempResponse = await this.fetchWithTimeout(`${this.backendUrl}/api/temps/cpu-gpu`);
 
         if (!tempResponse.ok) {
           throw new Error(`HTTP ${tempResponse.status}: ${tempResponse.statusText}`);
         }
 
         const tempData = await tempResponse.json();
+        
+        // Mark successful poll
+        this.lastSuccessfulPoll = Date.now();
+        this.consecutiveFailures = 0;
         
         // Forward temperature data to client
         if (this.DeskThing) {
@@ -174,12 +250,7 @@ class BackendController {
         }
 
         // Also fetch and send stats
-        const statsResponse = await fetch(`${this.backendUrl}/api/stats`, {
-          method: 'GET',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-        });
+        const statsResponse = await this.fetchWithTimeout(`${this.backendUrl}/api/stats`);
 
         if (statsResponse.ok) {
           const statsData = await statsResponse.json();
@@ -192,16 +263,22 @@ class BackendController {
         }
 
       } catch (error) {
-        const errorMsg = error instanceof Error ? error.message : String(error);
-        this.addLog('error', `Polling error: ${errorMsg}`);
-        this.connectionStatus = 'error';
-        this.lastError = errorMsg;
-        this.sendConnectionStatus();
-        this.stopPolling();
+        this.consecutiveFailures++;
         
-        // Schedule reconnect
-        if (this.autoConnect) {
-          this.scheduleReconnect();
+        let errorMsg = error instanceof Error ? error.message : String(error);
+        
+        // Provide more specific error messages
+        if (error instanceof Error && error.name === 'AbortError') {
+          errorMsg = `Request timeout (no response after ${this.connectionCheckTimeout}ms)`;
+        } else if (errorMsg.includes('fetch') || errorMsg.includes('Failed to fetch')) {
+          errorMsg = 'Server unreachable (network error)';
+        }
+        
+        this.addLog('error', `Polling error (${this.consecutiveFailures}/${this.maxConsecutiveFailures}): ${errorMsg}`);
+        
+        // If we've had too many consecutive failures, mark as disconnected
+        if (this.consecutiveFailures >= this.maxConsecutiveFailures) {
+          this.handleConnectionLost(`${this.maxConsecutiveFailures} consecutive polling failures`);
         }
       }
     };
@@ -227,12 +304,7 @@ class BackendController {
     }
 
     try {
-      const response = await fetch(`${this.backendUrl}/api/sensors/all`, {
-        method: 'GET',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-      });
+      const response = await this.fetchWithTimeout(`${this.backendUrl}/api/sensors/all`);
 
       if (!response.ok) {
         throw new Error(`HTTP ${response.status}: ${response.statusText}`);
@@ -251,6 +323,14 @@ class BackendController {
     } catch (error) {
       const errorMsg = error instanceof Error ? error.message : String(error);
       this.addLog('error', `Failed to request full sensors: ${errorMsg}`);
+      
+      // Check if this indicates a lost connection
+      if (errorMsg.includes('fetch') || errorMsg.includes('timeout')) {
+        this.consecutiveFailures++;
+        if (this.consecutiveFailures >= this.maxConsecutiveFailures) {
+          this.handleConnectionLost('Request failed - server may be down');
+        }
+      }
     }
   }
 
@@ -261,12 +341,7 @@ class BackendController {
     }
 
     try {
-      const response = await fetch(`${this.backendUrl}/api/sensors/relevant`, {
-        method: 'GET',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-      });
+      const response = await this.fetchWithTimeout(`${this.backendUrl}/api/sensors/relevant`);
 
       if (!response.ok) {
         throw new Error(`HTTP ${response.status}: ${response.statusText}`);
@@ -285,6 +360,14 @@ class BackendController {
     } catch (error) {
       const errorMsg = error instanceof Error ? error.message : String(error);
       this.addLog('error', `Failed to request relevant sensors: ${errorMsg}`);
+      
+      // Check if this indicates a lost connection
+      if (errorMsg.includes('fetch') || errorMsg.includes('timeout')) {
+        this.consecutiveFailures++;
+        if (this.consecutiveFailures >= this.maxConsecutiveFailures) {
+          this.handleConnectionLost('Request failed - server may be down');
+        }
+      }
     }
   }
 
@@ -295,12 +378,7 @@ class BackendController {
     }
 
     try {
-      const response = await fetch(`${this.backendUrl}/api/temps/cpu-gpu`, {
-        method: 'GET',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-      });
+      const response = await this.fetchWithTimeout(`${this.backendUrl}/api/temps/cpu-gpu`);
 
       if (!response.ok) {
         throw new Error(`HTTP ${response.status}: ${response.statusText}`);
@@ -319,6 +397,14 @@ class BackendController {
     } catch (error) {
       const errorMsg = error instanceof Error ? error.message : String(error);
       this.addLog('error', `Failed to request temperatures: ${errorMsg}`);
+      
+      // Check if this indicates a lost connection
+      if (errorMsg.includes('fetch') || errorMsg.includes('timeout')) {
+        this.consecutiveFailures++;
+        if (this.consecutiveFailures >= this.maxConsecutiveFailures) {
+          this.handleConnectionLost('Request failed - server may be down');
+        }
+      }
     }
   }
 
@@ -327,8 +413,26 @@ class BackendController {
       clearTimeout(this.reconnectTimer);
     }
 
-    const delayMs = this.reconnectInterval * 1000;
-    this.addLog('info', `Will retry connection in ${this.reconnectInterval} seconds`);
+    // Calculate reconnect delay with exponential backoff
+    let delaySeconds: number;
+    
+    if (this.fastReconnectAttempts < this.maxFastReconnectAttempts) {
+      // Fast reconnect phase: start at 2 seconds and use exponential backoff
+      delaySeconds = this.fastReconnectInterval * Math.pow(
+        this.reconnectBackoffMultiplier, 
+        this.fastReconnectAttempts
+      );
+      // Cap at max interval
+      delaySeconds = Math.min(delaySeconds, this.maxReconnectInterval);
+    } else {
+      // After fast attempts, use configured reconnect interval
+      delaySeconds = this.reconnectInterval;
+    }
+
+    this.fastReconnectAttempts++;
+    const delayMs = Math.round(delaySeconds * 1000);
+    
+    this.addLog('info', `Will retry connection in ${delaySeconds.toFixed(1)} seconds (attempt ${this.fastReconnectAttempts})`);
     
     this.reconnectTimer = setTimeout(() => {
       this.connect();
@@ -337,8 +441,12 @@ class BackendController {
 
   public async disconnect() {
     this.stopPolling();
+    this.stopHealthCheck();
     
     this.connectionStatus = 'disconnected';
+    this.lastSuccessfulPoll = null;
+    this.consecutiveFailures = 0;
+    this.fastReconnectAttempts = 0; // Reset fast reconnect counter
     this.addLog('info', 'Disconnected from backend');
     this.sendConnectionStatus();
     
