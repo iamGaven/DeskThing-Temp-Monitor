@@ -6,8 +6,8 @@
   "version": "0.11.2",
   "version_code": "11.2",
   "compatible_server": ["11"],
-  "compatible_client": ["11"],
-  "description": "A redesigned weather and spotify at a glance. For best experience, assign 2 of your top buttons to rewind/skip using the desktop app",
+  "compatible_client": ["11"],  "description": "A sleek and responsive app that monitors your CPU and GPU temperatures in real-time, showing current, minimum, and maximum values, along with device names and connection status",
+
   "author": "IamGaven",
   "platforms": [
     "windows",
