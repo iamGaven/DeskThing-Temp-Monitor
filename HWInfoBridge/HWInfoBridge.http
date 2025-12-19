@@ -1,0 +1,6 @@
+@HWInfoBridge_HostAddress = http://localhost:5017
+
+GET {{HWInfoBridge_HostAddress}}/weatherforecast/
+Accept: application/json
+
+###

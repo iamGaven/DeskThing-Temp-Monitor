@@ -20,11 +20,21 @@ export type ConnectionInfo = {
   lastError: string | null;
 };
 
+// Server status info
+export type ServerStatus = {
+  isRunning: boolean;
+  executablePath: string;
+};
+
 // Data sent to client from server
 export type ToClientData = 
   | {
       type: 'connectionStatus';
       payload: ConnectionInfo;
+    }
+  | {
+      type: 'serverStatus';
+      payload: ServerStatus;
     }
   | {
       type: 'log';
@@ -63,7 +73,7 @@ export type ToClientData =
 export type GenericTransitData = 
   | {
       type: 'get';
-      request: 'status' | 'logs';
+      request: 'status' | 'logs' | 'serverStatus';
       payload?: string;
     }
   | {
@@ -72,6 +82,18 @@ export type GenericTransitData =
     }
   | {
       type: 'disconnect';
+      payload?: string;
+    }
+  | {
+      type: 'startServer';
+      payload?: string;
+    }
+  | {
+      type: 'stopServer';
+      payload?: string;
+    }
+  | {
+      type: 'restartServer';
       payload?: string;
     }
   | {
@@ -95,6 +117,8 @@ export type GenericTransitData =
 export type BackendSettings = {
   backendUrl: string;
   autoConnect: boolean;
+  autoStartServer: boolean;
+  serverExecutablePath: string;
   reconnectInterval: number;
   maxLogs: number;
 };

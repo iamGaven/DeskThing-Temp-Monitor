@@ -45,6 +45,10 @@ if (HWHash.Sensors.Count == 0)
 
 // Build web server
 var builder = WebApplication.CreateBuilder(args);
+// Configure logging to reduce verbosity
+builder.Logging.ClearProviders();
+builder.Logging.AddConsole();
+builder.Logging.SetMinimumLevel(LogLevel.Warning);
 
 // Add SignalR
 builder.Services.AddSignalR();
