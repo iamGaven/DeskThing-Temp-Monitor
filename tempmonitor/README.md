@@ -1,5 +1,7 @@
 # DeskThing TempMonitor
 
+![Main Screen](../ReadMeImages/Capture.PNG)
+
 **TempMonitor** is a temperature monitoring app for your PC designed to work with DeskThing, the Spotify car display system. It shows real-time CPU and GPU temperatures on DeskThing using a two-part system:
 
 1. **C# Server (HWInfoBridge)**  
