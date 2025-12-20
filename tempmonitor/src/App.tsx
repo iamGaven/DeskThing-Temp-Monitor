@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, useRef } from "react";
 import Simple from "./simpler";
 import UsageStatsPage from "./UsageStatsPage";
 import TestSimpler from "./TestSimpler";
@@ -51,40 +51,151 @@ const App: React.FC = () => {
   const [usageData, setUsageData] = useState<UsageData | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [currentPage, setCurrentPage] = useState<Page>('temperature');
+  
+  // Track if keys have been overridden
+  const keysOverriddenRef = useRef(false);
+  const tempButtonRef = useRef<HTMLButtonElement>(null);
+  const usageButtonRef = useRef<HTMLButtonElement>(null);
+  const containerRef = useRef<HTMLDivElement>(null);
+  const previousPageRef = useRef<Page | null>(null);
 
-  // Manage subscriptions based on current page
+
+  // Auto-focus the page so keyboard events work immediately
+  useEffect(() => {
+    if (isDev) return;
+
+    console.log("=== AUTO-FOCUSING PAGE FOR KEYBOARD EVENTS ===");
+    
+    // Focus the window
+    window.focus();
+    
+    // Focus the container div
+    if (containerRef.current) {
+      containerRef.current.focus();
+      console.log("Container focused");
+    }
+    
+    // Also try focusing document.body
+    document.body.focus();
+    
+    // Override keys after focusing
+    setTimeout(() => {
+      console.log("=== OVERRIDING KEYS ===");
+      DeskThing.overrideKeys(['1', '2']);
+      keysOverriddenRef.current = true;
+    }, 100);
+    
+    // Set a timer to keep trying to focus in case it doesn't work the first time
+    const focusInterval = setInterval(() => {
+      if (document.hasFocus()) {
+        console.log("Document has focus - stopping focus attempts");
+        clearInterval(focusInterval);
+      } else {
+        console.log("Document doesn't have focus - trying again");
+        window.focus();
+        if (containerRef.current) {
+          containerRef.current.focus();
+        }
+      }
+    }, 100);
+    
+    // Stop trying after 2 seconds
+    setTimeout(() => clearInterval(focusInterval), 2000);
+    
+    return () => clearInterval(focusInterval);
+  }, []);
+
+  // Set up keyboard event listener for physical keys
+  useEffect(() => {
+    if (isDev) return;
+
+    const handleKeyPress = (event: KeyboardEvent) => {
+      const key = event.key;
+      const code = event.code;
+      
+      console.log("=== KEY PRESS DETECTED ===", { key, code });
+      
+      // Handle button 1 (Temperature page)
+      if (key === '1' || code === 'Digit1') {
+        console.log("Button 1 pressed - switching to temperature page");
+        event.preventDefault();
+        event.stopPropagation();
+        setCurrentPage('temperature');
+        return;
+      }
+      
+      // Handle button 2 (Usage page)
+      if (key === '2' || code === 'Digit2') {
+        console.log("Button 2 pressed - switching to usage page");
+        event.preventDefault();
+        event.stopPropagation();
+        setCurrentPage('usage');
+        return;
+      }
+    };
+
+    // Add listener with capture phase
+    window.addEventListener('keydown', handleKeyPress, { capture: true, passive: false });
+    console.log("=== KEYBOARD LISTENER ADDED ===");
+    
+    return () => {
+      window.removeEventListener('keydown', handleKeyPress, true);
+      console.log("=== KEYBOARD LISTENER REMOVED ===");
+      
+      // Restore keys when component unmounts
+      if (keysOverriddenRef.current) {
+        console.log("=== RESTORING KEYS 1 AND 2 ===");
+        DeskThing.restoreKeys(['1', '2']);
+        keysOverriddenRef.current = false;
+      }
+    };
+  }, []);
+
+ // Manage subscriptions based on current page
   useEffect(() => {
     if (isDev) return;
     
     console.log(`=== PAGE CHANGED TO: ${currentPage} ===`);
+    const previousPage = previousPageRef.current;
+    console.log(`=== PREVIOUS PAGE WAS: ${previousPage || 'none'} ===`);
     
-    if (currentPage === 'temperature') {
-      // Subscribe to temperature, unsubscribe from usage
-      console.log('Sending subscribe request for temperature');
-      DeskThing.send({ type: 'subscribe', request: 'temperature' });
-      console.log('Sending unsubscribe request for usage');
-      DeskThing.send({ type: 'unsubscribe', request: 'usage' });
-      console.log('Subscribed to temperature data');
-    } else if (currentPage === 'usage') {
-      // Subscribe to usage, unsubscribe from temperature
-      console.log('Sending subscribe request for usage');
-      DeskThing.send({ type: 'subscribe', request: 'usage' });
-      console.log('Sending unsubscribe request for temperature');
-      DeskThing.send({ type: 'unsubscribe', request: 'temperature' });
-      console.log('Subscribed to usage data');
-    }
+    // Small delay to ensure key override is processed
+    const subscriptionTimer = setTimeout(() => {
+      // First, unsubscribe from previous page if there was one
+      if (previousPage) {
+        console.log(`Unsubscribing from ${previousPage}`);
+        DeskThing.send({ type: 'unsubscribe', request: previousPage });
+        
+        // Small delay to ensure unsubscribe is processed before subscribe
+        setTimeout(() => {
+          console.log(`Subscribing to ${currentPage}`);
+          DeskThing.send({ type: 'subscribe', request: currentPage });
+        }, 50);
+      } else {
+        // First time - no previous page, just subscribe
+        console.log(`First subscription to ${currentPage}`);
+        DeskThing.send({ type: 'subscribe', request: currentPage });
+      }
+      
+      // Update the ref for next time
+      previousPageRef.current = currentPage;
+    }, 100);
+    
+    return () => clearTimeout(subscriptionTimer);
   }, [currentPage]);
 
+  // Set up data listeners and fetch initial data
   useEffect(() => {
     // If in dev mode, skip the real data setup
     if (isDev) {
       console.log("=== RUNNING IN DEV MODE ===");
+      setIsLoading(false);
       return;
     }
 
     let invalid = false;
     
-    console.log("=== APP MOUNTED, SETTING UP LISTENERS ===");
+    console.log("=== SETTING UP DATA LISTENERS ===");
     
     // Listen for connection status updates
     const removeStatusListener = DeskThing.on('connectionStatus', (data) => {
@@ -99,14 +210,9 @@ const App: React.FC = () => {
       setConnectionInfo(data.payload);
       setIsLoading(false);
       
-      // Once connected, send initial subscription based on current page
+      // Connection status received - the page change effect will handle subscriptions
       if (data.payload.status === 'connected') {
-        console.log(`Connection established, subscribing to ${currentPage} data`);
-        if (currentPage === 'temperature') {
-          DeskThing.send({ type: 'subscribe', request: 'temperature' });
-        } else if (currentPage === 'usage') {
-          DeskThing.send({ type: 'subscribe', request: 'usage' });
-        }
+        console.log('Connection established');
       }
     });
 
@@ -136,14 +242,12 @@ const App: React.FC = () => {
       setUsageData(data.payload);
     });
 
+    // Fetch initial connection status
     const fetchInitialData = async () => {
       console.log("=== REQUESTING INITIAL STATUS ===");
       try {
-        // Request current connection status
-        console.log("Sending: { type: 'get', request: 'status' }");
         DeskThing.send({ type: 'get', request: 'status' });
-        
-        console.log("Initial request sent successfully");
+        console.log("Initial status request sent");
         
         // Set a backup timeout in case we don't get a response
         setTimeout(() => {
@@ -169,9 +273,7 @@ const App: React.FC = () => {
     };
   }, []);
 
-  console.log("Current connectionInfo state:", connectionInfo);
-  console.log("Current temperature data:", temperatureData);
-  console.log("Current usage data:", usageData);
+  console.log("Current state:", { connectionInfo, temperatureData, usageData, currentPage });
 
   // Dev mode - show navigation and test pages
   if (isDev) {
@@ -210,7 +312,7 @@ const App: React.FC = () => {
     );
   }
 
-  // Production mode
+  // Production mode - Loading state
   if (isLoading) {
     return (
       <div className="bg-slate-900 w-screen h-screen flex justify-center items-center overflow-hidden">
@@ -219,11 +321,17 @@ const App: React.FC = () => {
     );
   }
 
+  // Production mode - Main app
   return (
-    <div className="w-screen h-screen bg-slate-950 flex flex-col overflow-hidden">
+    <div 
+      ref={containerRef}
+      tabIndex={0}
+      className="w-screen h-screen bg-slate-950 flex flex-col overflow-hidden outline-none"
+    >
       {/* Production Navigation - Centered */}
       <div className="bg-slate-900/50 border-b border-slate-700/30 p-2 flex justify-center items-center gap-2 flex-shrink-0">
         <button
+          ref={tempButtonRef}
           onClick={() => setCurrentPage('temperature')}
           className={`px-4 py-1.5 rounded-lg text-sm font-semibold transition-colors ${
             currentPage === 'temperature'
@@ -234,6 +342,7 @@ const App: React.FC = () => {
           Temps
         </button>
         <button
+          ref={usageButtonRef}
           onClick={() => setCurrentPage('usage')}
           className={`px-4 py-1.5 rounded-lg text-sm font-semibold transition-colors ${
             currentPage === 'usage'
