@@ -42,6 +42,9 @@ export type UsageData = {
   gpuCoreLoad: UsageMetric | null;
 };
 
+// Data types that can be subscribed to
+export type SubscriptionDataType = 'temperature' | 'usage' | 'stats';
+
 // Data sent to client from server
 export type ToClientData = 
   | {
@@ -121,6 +124,16 @@ export type GenericTransitData =
       payload?: string;
     }
   | {
+      type: 'subscribe';
+      request: SubscriptionDataType; // Use 'request' field like 'get' does
+      payload?: string;
+    }
+  | {
+      type: 'unsubscribe';
+      request: SubscriptionDataType; // Use 'request' field like 'get' does
+      payload?: string;
+    }
+  | {
       type: 'requestFullSensors';
       payload?: string;
     }
@@ -129,8 +142,8 @@ export type GenericTransitData =
       payload?: string;
     }
   | {
-    type: 'requestUsageStats';
-    payload?: string;
+      type: 'requestUsageStats';
+      payload?: string;
     }
   | {
       type: 'requestTemperatures';

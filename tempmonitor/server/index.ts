@@ -33,6 +33,43 @@ DeskThing.on("get", async (data: any) => {
   }
 });
 
+// NEW: Handle subscription requests
+DeskThing.on("subscribe", (data: any) => {
+  console.log("=== SUBSCRIBE REQUEST DEBUG ===");
+  console.log("Full data object:", JSON.stringify(data, null, 2));
+  
+  // Extract from 'request' field (same pattern as 'get')
+  const dataType = data?.request || data?.payload?.request;
+  
+  console.log(`Extracted dataType from request field: "${dataType}"`);
+  
+  if (dataType === 'temperature' || dataType === 'usage' || dataType === 'stats') {
+    backendController.subscribe(dataType);
+    console.log(`✓ Successfully subscribed to ${dataType}`);
+  } else {
+    console.warn(`✗ Unknown/invalid data type for subscription: "${dataType}"`);
+  }
+  console.log("=== END SUBSCRIBE DEBUG ===\n");
+});
+
+DeskThing.on("unsubscribe", (data: any) => {
+  console.log("=== UNSUBSCRIBE REQUEST DEBUG ===");
+  console.log("Full data object:", JSON.stringify(data, null, 2));
+  
+  // Extract from 'request' field (same pattern as 'get')
+  const dataType = data?.request || data?.payload?.request;
+  
+  console.log(`Extracted dataType from request field: "${dataType}"`);
+  
+  if (dataType === 'temperature' || dataType === 'usage' || dataType === 'stats') {
+    backendController.unsubscribe(dataType);
+    console.log(`✓ Successfully unsubscribed from ${dataType}`);
+  } else {
+    console.warn(`✗ Unknown/invalid data type for unsubscription: "${dataType}"`);
+  }
+  console.log("=== END UNSUBSCRIBE DEBUG ===\n");
+});
+
 // Handle connection control from client
 DeskThing.on("connect", () => {
   console.log("Connect request received from client");
@@ -69,8 +106,6 @@ DeskThing.on("requestUsageStats", () => {
   console.log("Request Usage from client");
   backendController.requestUsageStats();
 });
-
-
 
 // Handle settings updates
 DeskThing.on(DESKTHING_EVENTS.SETTINGS, (settings) => {

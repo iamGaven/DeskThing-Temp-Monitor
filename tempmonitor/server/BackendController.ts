@@ -20,7 +20,7 @@ class BackendController {
   
   private backendUrl: string = "http://localhost:5000";
   private autoConnect: boolean = true;
-  private autoStartServer: boolean = true; // New: Auto-start C# server
+  private autoStartServer: boolean = true;
   private reconnectInterval: number = 30;
   private maxLogs: number = 100;
   private pollInterval: number = 500;
@@ -39,7 +39,7 @@ class BackendController {
   private serverProcess: ChildProcess | null = null;
   private serverExecutablePath: string = "";
   private isServerRunning: boolean = false;
-  private serverStartupDelay: number = 3000; // Wait 3 seconds after starting server
+  private serverStartupDelay: number = 3000;
   
   private connectionStatus: ConnectionStatus = 'disconnected';
   private lastConnected: number | null = null;
@@ -51,21 +51,55 @@ class BackendController {
   
   private logs: LogEntry[] = [];
 
-private constructor() {
-  // Set default server path (can be overridden in settings)
-  const appData = process.env.APPDATA || path.join(require('os').homedir(), 'AppData', 'Roaming');
-  this.serverExecutablePath = path.join(appData, "deskthing", "apps", "tempmonitor", "client", "HWInfoBridge.exe");
-}
+  // NEW: Active subscriptions - what data should we poll?
+  private activeSubscriptions: Set<'temperature' | 'usage' | 'stats'> = new Set();
 
-static getInstance(): BackendController {
-  if (!BackendController.instance) {
-    BackendController.instance = new BackendController();
+  private constructor() {
+    const appData = process.env.APPDATA || path.join(require('os').homedir(), 'AppData', 'Roaming');
+    this.serverExecutablePath = path.join(appData, "deskthing", "apps", "tempmonitor", "client", "HWInfoBridge.exe");
   }
-  return BackendController.instance;
-}
+
+  static getInstance(): BackendController {
+    if (!BackendController.instance) {
+      BackendController.instance = new BackendController();
+    }
+    return BackendController.instance;
+  }
 
   public setDeskThing(deskThing: DeskThingClass<GenericTransitData, ToClientData>) {
     this.DeskThing = deskThing;
+  }
+
+  // NEW: Subscribe to specific data types
+  public subscribe(dataType: 'temperature' | 'usage' | 'stats') {
+    const wasEmpty = this.activeSubscriptions.size === 0;
+    this.activeSubscriptions.add(dataType);
+    
+    this.addLog('info', `Subscribed to ${dataType} data`);
+    
+    // If this is the first subscription and we're connected, start polling
+    if (wasEmpty && this.connectionStatus === 'connected') {
+      this.startPolling();
+    }
+  }
+
+  // NEW: Unsubscribe from specific data types
+  public unsubscribe(dataType: 'temperature' | 'usage' | 'stats') {
+    this.activeSubscriptions.delete(dataType);
+    
+    this.addLog('info', `Unsubscribed from ${dataType} data`);
+    
+    // If no more subscriptions, stop polling
+    if (this.activeSubscriptions.size === 0) {
+      this.stopPolling();
+    }
+  }
+
+  // NEW: Clear all subscriptions
+  public clearSubscriptions() {
+    this.activeSubscriptions.clear();
+    this.stopPolling();
+    this.addLog('info', 'Cleared all subscriptions');
   }
 
   private addLog(level: LogEntry['level'], message: string) {
@@ -113,7 +147,6 @@ static getInstance(): BackendController {
     }
   }
 
-  // Check if C# server executable exists
   private checkServerExecutable(): boolean {
     if (!this.serverExecutablePath) {
       this.addLog('error', 'No server executable path configured');
@@ -128,7 +161,6 @@ static getInstance(): BackendController {
     return true;
   }
 
-  // Start the C# server process
   public async startServer(): Promise<boolean> {
     if (this.isServerRunning) {
       this.addLog('warn', 'Server is already running');
@@ -142,13 +174,11 @@ static getInstance(): BackendController {
     this.addLog('info', `Starting C# server from: ${this.serverExecutablePath}`);
 
     try {
-      // Spawn the C# server process
       this.serverProcess = spawn(this.serverExecutablePath, [], {
         cwd: path.dirname(this.serverExecutablePath),
         stdio: ['ignore', 'pipe', 'pipe']
       });
 
-      // Handle server output
       this.serverProcess.stdout?.on('data', (data) => {
         const output = data.toString().trim();
         if (output) {
@@ -156,7 +186,6 @@ static getInstance(): BackendController {
         }
       });
 
-      // Handle server errors
       this.serverProcess.stderr?.on('data', (data) => {
         const error = data.toString().trim();
         if (error) {
@@ -164,7 +193,6 @@ static getInstance(): BackendController {
         }
       });
 
-      // Handle process exit
       this.serverProcess.on('exit', (code) => {
         this.isServerRunning = false;
         this.sendServerStatus();
@@ -175,13 +203,11 @@ static getInstance(): BackendController {
           this.addLog('error', `C# server exited with code ${code}`);
         }
 
-        // If we were connected, mark as disconnected
         if (this.connectionStatus === 'connected') {
           this.handleConnectionLost('Server process terminated');
         }
       });
 
-      // Handle process errors
       this.serverProcess.on('error', (err) => {
         this.addLog('error', `Failed to start C# server: ${err.message}`);
         this.isServerRunning = false;
@@ -192,7 +218,6 @@ static getInstance(): BackendController {
       this.sendServerStatus();
       this.addLog('success', 'C# server process started');
 
-      // Wait for server to initialize
       this.addLog('info', `Waiting ${this.serverStartupDelay}ms for server to initialize...`);
       await new Promise(resolve => setTimeout(resolve, this.serverStartupDelay));
 
@@ -207,7 +232,6 @@ static getInstance(): BackendController {
     }
   }
 
-  // Stop the C# server process
   public async stopServer(): Promise<void> {
     if (!this.serverProcess || !this.isServerRunning) {
       this.addLog('warn', 'Server is not running');
@@ -217,10 +241,8 @@ static getInstance(): BackendController {
     this.addLog('info', 'Stopping C# server...');
 
     try {
-      // Try graceful shutdown first
       this.serverProcess.kill('SIGTERM');
       
-      // Wait up to 5 seconds for graceful shutdown
       await new Promise<void>((resolve) => {
         const timeout = setTimeout(() => {
           if (this.serverProcess && this.isServerRunning) {
@@ -247,11 +269,10 @@ static getInstance(): BackendController {
     }
   }
 
-  // Restart the C# server
   public async restartServer(): Promise<boolean> {
     this.addLog('info', 'Restarting C# server...');
     await this.stopServer();
-    await new Promise(resolve => setTimeout(resolve, 1000)); // Wait 1 second
+    await new Promise(resolve => setTimeout(resolve, 1000));
     return await this.startServer();
   }
 
@@ -284,7 +305,6 @@ static getInstance(): BackendController {
       this.stopPolling();
       this.stopHealthCheck();
       
-      // Schedule reconnect if auto-connect is enabled
       if (this.autoConnect) {
         this.scheduleReconnect();
       }
@@ -321,7 +341,6 @@ static getInstance(): BackendController {
       return;
     }
 
-    // If auto-start is enabled and server is not running, start it first
     if (this.autoStartServer && !this.isServerRunning) {
       this.addLog('info', 'Auto-starting C# server...');
       const started = await this.startServer();
@@ -345,8 +364,8 @@ static getInstance(): BackendController {
       const data = await response.json();
       
       this.addLog('success', `Connection test successful!`);
-      this.addLog('info', `CPU: ${data.cpu?.name} - ${data.cpu?.value}${data.cpu?.unit} (Min: ${data.cpu?.min}${data.cpu?.unit}, Max: ${data.cpu?.max}${data.cpu?.unit})`);
-      this.addLog('info', `GPU: ${data.gpu?.name} - ${data.gpu?.value}${data.gpu?.unit} (Min: ${data.gpu?.min}${data.gpu?.unit}, Max: ${data.gpu?.max}${data.gpu?.unit})`);
+      this.addLog('info', `CPU: ${data.cpu?.name} - ${data.cpu?.value}${data.cpu?.unit}`);
+      this.addLog('info', `GPU: ${data.gpu?.name} - ${data.gpu?.value}${data.gpu?.unit}`);
       
       if (this.DeskThing) {
         this.DeskThing.send({ 
@@ -369,7 +388,10 @@ static getInstance(): BackendController {
         this.reconnectTimer = null;
       }
 
-      this.startPolling();
+      // Only start polling if we have active subscriptions
+      if (this.activeSubscriptions.size > 0) {
+        this.startPolling();
+      }
       this.startHealthCheck();
       
     } catch (error) {
@@ -391,55 +413,70 @@ static getInstance(): BackendController {
       }
     }
   }
-private startPolling() {
+
+  private startPolling() {
     this.stopPolling();
 
-    this.addLog('info', `Started polling C# backend every ${this.pollInterval}ms`);
+    // Don't start polling if no subscriptions
+    if (this.activeSubscriptions.size === 0) {
+      this.addLog('info', 'No active subscriptions, skipping polling');
+      return;
+    }
+
+    this.addLog('info', `Started polling C# backend every ${this.pollInterval}ms for: ${Array.from(this.activeSubscriptions).join(', ')}`);
 
     const poll = async () => {
       try {
-        // Fetch temperature data
-        const tempResponse = await this.fetchWithTimeout(`${this.backendUrl}/api/temps/cpu-gpu`);
+        // Poll temperature data if subscribed
+        if (this.activeSubscriptions.has('temperature')) {
+          const tempResponse = await this.fetchWithTimeout(`${this.backendUrl}/api/temps/cpu-gpu`);
 
-        if (!tempResponse.ok) {
-          throw new Error(`HTTP ${tempResponse.status}: ${tempResponse.statusText}`);
+          if (!tempResponse.ok) {
+            throw new Error(`HTTP ${tempResponse.status}: ${tempResponse.statusText}`);
+          }
+
+          const tempData = await tempResponse.json();
+          
+          if (this.DeskThing) {
+            this.DeskThing.send({ 
+              type: 'temperatureData', 
+              payload: tempData 
+            });
+          }
         }
 
-        const tempData = await tempResponse.json();
-        
+        // Poll usage data if subscribed
+        if (this.activeSubscriptions.has('usage')) {
+          const usageResponse = await this.fetchWithTimeout(`${this.backendUrl}/api/usage`);
+
+          if (usageResponse.ok) {
+            const usageData = await usageResponse.json();
+            if (this.DeskThing) {
+              this.DeskThing.send({ 
+                type: 'usageData', 
+                payload: usageData 
+              });
+            }
+          }
+        }
+
+        // Poll stats data if subscribed
+        if (this.activeSubscriptions.has('stats')) {
+          const statsResponse = await this.fetchWithTimeout(`${this.backendUrl}/api/stats`);
+
+          if (statsResponse.ok) {
+            const statsData = await statsResponse.json();
+            if (this.DeskThing) {
+              this.DeskThing.send({ 
+                type: 'statsData', 
+                payload: statsData 
+              });
+            }
+          }
+        }
+
         this.lastSuccessfulPoll = Date.now();
         this.consecutiveFailures = 0;
-        
-        if (this.DeskThing) {
-          this.DeskThing.send({ 
-            type: 'temperatureData', 
-            payload: tempData 
-          });
-        }
-
-        // Fetch usage stats
-        const usageResponse = await this.fetchWithTimeout(`${this.backendUrl}/api/usage`);
-        if (usageResponse.ok) {
-          const usageData = await usageResponse.json();
-          if (this.DeskThing) {
-            this.DeskThing.send({ 
-              type: 'usageData', 
-              payload: usageData 
-            });
-          }
-        }
-
-        // Fetch general stats
-        const statsResponse = await this.fetchWithTimeout(`${this.backendUrl}/api/stats`);
-        if (statsResponse.ok) {
-          const statsData = await statsResponse.json();
-          if (this.DeskThing) {
-            this.DeskThing.send({ 
-              type: 'statsData', 
-              payload: statsData 
-            });
-          }
-        }
 
       } catch (error) {
         this.consecutiveFailures++;
@@ -581,40 +618,40 @@ private startPolling() {
   }
 
   public async requestUsageStats() {
-  if (this.connectionStatus !== 'connected') {
-    this.addLog('warn', 'Not connected to backend');
-    return;
-  }
-
-  try {
-    const response = await this.fetchWithTimeout(`${this.backendUrl}/api/usage`);
-
-    if (!response.ok) {
-      throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+    if (this.connectionStatus !== 'connected') {
+      this.addLog('warn', 'Not connected to backend');
+      return;
     }
 
-    const data: UsageData = await response.json();
-    
-    if (this.DeskThing) {
-      this.DeskThing.send({ 
-        type: 'usageData', 
-        payload: data 
-      });
-    }
-    
-    this.addLog('info', `Usage - CPU: ${data.totalCpuUtility?.value.toFixed(1)}${data.totalCpuUtility?.unit}, Memory: ${data.physicalMemoryLoad?.value.toFixed(1)}${data.physicalMemoryLoad?.unit}, GPU: ${data.gpuCoreLoad?.value.toFixed(1)}${data.gpuCoreLoad?.unit}`);
-  } catch (error) {
-    const errorMsg = error instanceof Error ? error.message : String(error);
-    this.addLog('error', `Failed to request usage stats: ${errorMsg}`);
-    
-    if (errorMsg.includes('fetch') || errorMsg.includes('timeout')) {
-      this.consecutiveFailures++;
-      if (this.consecutiveFailures >= this.maxConsecutiveFailures) {
-        this.handleConnectionLost('Request failed - server may be down');
+    try {
+      const response = await this.fetchWithTimeout(`${this.backendUrl}/api/usage`);
+
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+      }
+
+      const data: UsageData = await response.json();
+      
+      if (this.DeskThing) {
+        this.DeskThing.send({ 
+          type: 'usageData', 
+          payload: data 
+        });
+      }
+      
+      this.addLog('info', `Usage - CPU: ${data.totalCpuUtility?.value.toFixed(1)}${data.totalCpuUtility?.unit}, Memory: ${data.physicalMemoryLoad?.value.toFixed(1)}${data.physicalMemoryLoad?.unit}, GPU: ${data.gpuCoreLoad?.value.toFixed(1)}${data.gpuCoreLoad?.unit}`);
+    } catch (error) {
+      const errorMsg = error instanceof Error ? error.message : String(error);
+      this.addLog('error', `Failed to request usage stats: ${errorMsg}`);
+      
+      if (errorMsg.includes('fetch') || errorMsg.includes('timeout')) {
+        this.consecutiveFailures++;
+        if (this.consecutiveFailures >= this.maxConsecutiveFailures) {
+          this.handleConnectionLost('Request failed - server may be down');
+        }
       }
     }
   }
-}
 
   private scheduleReconnect() {
     if (this.reconnectTimer) {
@@ -736,6 +773,9 @@ private startPolling() {
   public start() {
     this.addLog('info', 'Backend controller started');
     
+    // DON'T automatically subscribe on start - let the frontend control subscriptions
+    // this.subscribe('temperature'); // REMOVED
+    
     if (this.autoStartServer && this.autoConnect && this.backendUrl) {
       this.startServer().then(() => {
         this.connect();
@@ -753,6 +793,7 @@ private startPolling() {
       this.reconnectTimer = null;
     }
     
+    this.clearSubscriptions();
     await this.disconnect();
     await this.stopServer();
   }

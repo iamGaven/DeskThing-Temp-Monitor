@@ -52,22 +52,28 @@ const App: React.FC = () => {
   const [isLoading, setIsLoading] = useState(true);
   const [currentPage, setCurrentPage] = useState<Page>('temperature');
 
-  // Request usage stats when page changes to usage
+  // Manage subscriptions based on current page
   useEffect(() => {
     if (isDev) return;
     
-    if (currentPage === 'usage' && connectionInfo?.status === 'connected') {
-      console.log("=== REQUESTING USAGE STATS ===");
-      DeskThing.send({ type: 'requestUsageStats' });
-      
-      // Set up interval to refresh usage stats while on this page
-      const interval = setInterval(() => {
-        DeskThing.send({ type: 'requestUsageStats' });
-      }, 500); // Match the polling interval
-      
-      return () => clearInterval(interval);
+    console.log(`=== PAGE CHANGED TO: ${currentPage} ===`);
+    
+    if (currentPage === 'temperature') {
+      // Subscribe to temperature, unsubscribe from usage
+      console.log('Sending subscribe request for temperature');
+      DeskThing.send({ type: 'subscribe', request: 'temperature' });
+      console.log('Sending unsubscribe request for usage');
+      DeskThing.send({ type: 'unsubscribe', request: 'usage' });
+      console.log('Subscribed to temperature data');
+    } else if (currentPage === 'usage') {
+      // Subscribe to usage, unsubscribe from temperature
+      console.log('Sending subscribe request for usage');
+      DeskThing.send({ type: 'subscribe', request: 'usage' });
+      console.log('Sending unsubscribe request for temperature');
+      DeskThing.send({ type: 'unsubscribe', request: 'temperature' });
+      console.log('Subscribed to usage data');
     }
-  }, [currentPage, connectionInfo?.status]);
+  }, [currentPage]);
 
   useEffect(() => {
     // If in dev mode, skip the real data setup
@@ -92,6 +98,16 @@ const App: React.FC = () => {
       
       setConnectionInfo(data.payload);
       setIsLoading(false);
+      
+      // Once connected, send initial subscription based on current page
+      if (data.payload.status === 'connected') {
+        console.log(`Connection established, subscribing to ${currentPage} data`);
+        if (currentPage === 'temperature') {
+          DeskThing.send({ type: 'subscribe', request: 'temperature' });
+        } else if (currentPage === 'usage') {
+          DeskThing.send({ type: 'subscribe', request: 'usage' });
+        }
+      }
     });
 
     // Listen for temperature data
@@ -160,9 +176,9 @@ const App: React.FC = () => {
   // Dev mode - show navigation and test pages
   if (isDev) {
     return (
-      <div className="w-screen h-screen bg-slate-950 flex flex-col">
+      <div className="w-screen h-screen bg-slate-950 flex flex-col overflow-hidden">
         {/* Dev Navigation - Centered */}
-        <div className="bg-slate-900 border-b border-slate-700 p-4 flex justify-center items-center gap-4">
+        <div className="bg-slate-900 border-b border-slate-700 p-4 flex justify-center items-center gap-4 flex-shrink-0">
           <span className="text-emerald-500 font-bold absolute left-4">DEV MODE</span>
           <button
             onClick={() => setCurrentPage('temperature')}
@@ -187,7 +203,7 @@ const App: React.FC = () => {
         </div>
 
         {/* Content */}
-        <div className="flex-1">
+        <div className="flex-1 overflow-hidden">
           {currentPage === 'temperature' ? <TestSimpler /> : <TestUsageStats />}
         </div>
       </div>
@@ -197,16 +213,16 @@ const App: React.FC = () => {
   // Production mode
   if (isLoading) {
     return (
-      <div className="bg-slate-900 w-screen h-screen flex justify-center items-center">
+      <div className="bg-slate-900 w-screen h-screen flex justify-center items-center overflow-hidden">
         <div className="text-white text-xl">Loading backend connection...</div>
       </div>
     );
   }
 
   return (
-    <div className="w-screen h-screen bg-slate-950 flex flex-col">
+    <div className="w-screen h-screen bg-slate-950 flex flex-col overflow-hidden">
       {/* Production Navigation - Centered */}
-      <div className="bg-slate-900/50 border-b border-slate-700/30 p-2 flex justify-center items-center gap-2">
+      <div className="bg-slate-900/50 border-b border-slate-700/30 p-2 flex justify-center items-center gap-2 flex-shrink-0">
         <button
           onClick={() => setCurrentPage('temperature')}
           className={`px-4 py-1.5 rounded-lg text-sm font-semibold transition-colors ${
@@ -230,7 +246,7 @@ const App: React.FC = () => {
       </div>
 
       {/* Content */}
-      <div className="flex-1">
+      <div className="flex-1 overflow-hidden">
         {currentPage === 'temperature' ? (
           <Simple connectionInfo={connectionInfo} temperatureData={temperatureData} />
         ) : (
