@@ -45,6 +45,9 @@ if (HWHash.Sensors.Count == 0)
 
 // Build web server
 var builder = WebApplication.CreateBuilder(args);
+// Configure JSON serialization
+
+
 // Configure logging to reduce verbosity
 builder.Logging.ClearProviders();
 builder.Logging.AddConsole();
@@ -158,6 +161,20 @@ app.MapGet("/api/temps", () =>
     });
 });
 
+
+// Stats
+app.MapGet("/api/stats", () =>
+{
+    var currentStats = HWHash.GetHWHashStats();
+    return Results.Json(new
+    {
+        collectionTime = currentStats.CollectionTime,
+        totalEntries = currentStats.TotalEntries,
+        totalCategories = currentStats.TotalCategories,
+        sensorsLoaded = HWHash.Sensors.Count
+    });
+});
+
 // CPU and GPU temperatures only
 app.MapGet("/api/temps/cpu-gpu", () =>
 {
@@ -195,18 +212,58 @@ app.MapGet("/api/temps/cpu-gpu", () =>
     });
 });
 
-// Stats
-app.MapGet("/api/stats", () =>
+// Hardware usage statistics (main usage metrics)
+app.MapGet("/api/usage", () =>
 {
-    var currentStats = HWHash.GetHWHashStats();
+    var relevantSensors = HWHash.GetRelevantList();
+    var allSensors = HWHash.GetOrderedList();
+
+    // Get Total CPU Utility from full list (more accurate than Total CPU Usage)
+    var totalCpuUtility = allSensors
+        .FirstOrDefault(s => s.NameDefault == "Total CPU Utility");
+
+    // Get main metrics from relevant list
+    var physicalMemoryLoad = relevantSensors
+        .FirstOrDefault(s => s.NameDefault == "Physical Memory Load");
+
+    var physicalMemoryUsed = relevantSensors
+        .FirstOrDefault(s => s.NameDefault == "Physical Memory Used");
+
+    var gpuCoreLoad = relevantSensors
+        .FirstOrDefault(s => s.NameDefault == "GPU Core Load");
+
     return Results.Json(new
     {
-        collectionTime = currentStats.CollectionTime,
-        totalEntries = currentStats.TotalEntries,
-        totalCategories = currentStats.TotalCategories,
-        sensorsLoaded = HWHash.Sensors.Count
+        timestamp = DateTime.Now,
+        totalCpuUtility = totalCpuUtility.NameDefault != null ? new
+        {
+            name = totalCpuUtility.NameDefault,
+            value = totalCpuUtility.ValueNow,
+            unit = totalCpuUtility.Unit
+        } : null,
+        physicalMemoryLoad = physicalMemoryLoad.NameDefault != null ? new
+        {
+            name = physicalMemoryLoad.NameCustom,
+            value = physicalMemoryLoad.ValueNow,
+            unit = physicalMemoryLoad.Unit
+        } : null,
+        physicalMemoryUsed = physicalMemoryUsed.NameDefault != null ? new
+        {
+            name = physicalMemoryUsed.NameCustom,
+            value = physicalMemoryUsed.ValueNow,
+            unit = physicalMemoryUsed.Unit
+        } : null,
+        gpuCoreLoad = gpuCoreLoad.NameDefault != null ? new
+        {
+            name = gpuCoreLoad.NameCustom,
+            value = gpuCoreLoad.ValueNow,
+            unit = gpuCoreLoad.Unit
+        } : null
     });
 });
+
+// Get ordered sensor list
+app.MapGet("/api/ordered", () => HWHash.GetOrderedList());
 
 Console.WriteLine("🚀 WebSocket Server running at http://localhost:5000");
 Console.WriteLine("📡 SignalR Hub: ws://localhost:5000/sensorhub");
@@ -360,4 +417,7 @@ public class SensorHub : Hub
             Console.WriteLine($"⚠️  Error sending temps: {ex.Message}");
         }
     }
+
+
+
 }

@@ -26,6 +26,22 @@ export type ServerStatus = {
   executablePath: string;
 };
 
+// Usage metric from HWHash
+export type UsageMetric = {
+  name: string;
+  value: number;
+  unit: string;
+};
+
+// Usage data from /api/usage endpoint
+export type UsageData = {
+  timestamp: string;
+  totalCpuUtility: UsageMetric | null;
+  physicalMemoryLoad: UsageMetric | null;
+  physicalMemoryUsed: UsageMetric | null;
+  gpuCoreLoad: UsageMetric | null;
+};
+
 // Data sent to client from server
 export type ToClientData = 
   | {
@@ -43,6 +59,10 @@ export type ToClientData =
   | {
       type: 'logs';
       payload: LogEntry[];
+    }
+  | {
+      type: 'usageData';
+      payload: UsageData;
     }
   | {
       type: 'sensorData';
@@ -108,6 +128,10 @@ export type GenericTransitData =
       type: 'requestRelevantSensors';
       payload?: string;
     }
+    | {
+    type: 'requestUsageStats';
+    payload?: string;
+  }
   | {
       type: 'requestTemperatures';
       payload?: string;

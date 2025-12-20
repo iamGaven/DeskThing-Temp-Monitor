@@ -65,6 +65,13 @@ DeskThing.on("requestTemperatures", () => {
   backendController.requestTemperatures();
 });
 
+DeskThing.on("requestUsageStats", () => {
+  console.log("Request Usage from client");
+  backendController.requestUsageStats();
+});
+
+
+
 // Handle settings updates
 DeskThing.on(DESKTHING_EVENTS.SETTINGS, (settings) => {
   console.log("Settings update received");

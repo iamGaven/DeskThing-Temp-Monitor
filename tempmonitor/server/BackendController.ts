@@ -7,7 +7,9 @@ import {
   GenericTransitData, 
   ConnectionStatus, 
   ConnectionInfo, 
-  LogEntry 
+  LogEntry,
+  UsageData
+
 } from "./types";
 import os from 'os';
 
@@ -389,14 +391,14 @@ static getInstance(): BackendController {
       }
     }
   }
-
-  private startPolling() {
+private startPolling() {
     this.stopPolling();
 
     this.addLog('info', `Started polling C# backend every ${this.pollInterval}ms`);
 
     const poll = async () => {
       try {
+        // Fetch temperature data
         const tempResponse = await this.fetchWithTimeout(`${this.backendUrl}/api/temps/cpu-gpu`);
 
         if (!tempResponse.ok) {
@@ -415,8 +417,20 @@ static getInstance(): BackendController {
           });
         }
 
-        const statsResponse = await this.fetchWithTimeout(`${this.backendUrl}/api/stats`);
+        // Fetch usage stats
+        const usageResponse = await this.fetchWithTimeout(`${this.backendUrl}/api/usage`);
+        if (usageResponse.ok) {
+          const usageData = await usageResponse.json();
+          if (this.DeskThing) {
+            this.DeskThing.send({ 
+              type: 'usageData', 
+              payload: usageData 
+            });
+          }
+        }
 
+        // Fetch general stats
+        const statsResponse = await this.fetchWithTimeout(`${this.backendUrl}/api/stats`);
         if (statsResponse.ok) {
           const statsData = await statsResponse.json();
           if (this.DeskThing) {
@@ -565,6 +579,42 @@ static getInstance(): BackendController {
       }
     }
   }
+
+  public async requestUsageStats() {
+  if (this.connectionStatus !== 'connected') {
+    this.addLog('warn', 'Not connected to backend');
+    return;
+  }
+
+  try {
+    const response = await this.fetchWithTimeout(`${this.backendUrl}/api/usage`);
+
+    if (!response.ok) {
+      throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+    }
+
+    const data: UsageData = await response.json();
+    
+    if (this.DeskThing) {
+      this.DeskThing.send({ 
+        type: 'usageData', 
+        payload: data 
+      });
+    }
+    
+    this.addLog('info', `Usage - CPU: ${data.totalCpuUtility?.value.toFixed(1)}${data.totalCpuUtility?.unit}, Memory: ${data.physicalMemoryLoad?.value.toFixed(1)}${data.physicalMemoryLoad?.unit}, GPU: ${data.gpuCoreLoad?.value.toFixed(1)}${data.gpuCoreLoad?.unit}`);
+  } catch (error) {
+    const errorMsg = error instanceof Error ? error.message : String(error);
+    this.addLog('error', `Failed to request usage stats: ${errorMsg}`);
+    
+    if (errorMsg.includes('fetch') || errorMsg.includes('timeout')) {
+      this.consecutiveFailures++;
+      if (this.consecutiveFailures >= this.maxConsecutiveFailures) {
+        this.handleConnectionLost('Request failed - server may be down');
+      }
+    }
+  }
+}
 
   private scheduleReconnect() {
     if (this.reconnectTimer) {

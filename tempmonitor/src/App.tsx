@@ -1,6 +1,8 @@
 import React, { useEffect, useState } from "react";
 import Simple from "./simpler";
+import UsageStatsPage from "./UsageStatsPage";
 import TestSimpler from "./TestSimpler";
+import TestUsageStats from "./TestUsageStats";
 import { createDeskThing } from "@deskthing/client";
 import { ToClientData, GenericTransitData, ConnectionInfo } from "./types";
 
@@ -27,15 +29,50 @@ interface TemperatureData {
   } | null;
 }
 
+interface UsageMetric {
+  name: string;
+  value: number;
+  unit: string;
+}
+
+interface UsageData {
+  timestamp: string;
+  totalCpuUtility: UsageMetric | null;
+  physicalMemoryLoad: UsageMetric | null;
+  physicalMemoryUsed: UsageMetric | null;
+  gpuCoreLoad: UsageMetric | null;
+}
+
+type Page = 'temperature' | 'usage';
+
 const App: React.FC = () => {
   const [connectionInfo, setConnectionInfo] = useState<ConnectionInfo | null>(null);
   const [temperatureData, setTemperatureData] = useState<TemperatureData | null>(null);
+  const [usageData, setUsageData] = useState<UsageData | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [currentPage, setCurrentPage] = useState<Page>('temperature');
+
+  // Request usage stats when page changes to usage
+  useEffect(() => {
+    if (isDev) return;
+    
+    if (currentPage === 'usage' && connectionInfo?.status === 'connected') {
+      console.log("=== REQUESTING USAGE STATS ===");
+      DeskThing.send({ type: 'requestUsageStats' });
+      
+      // Set up interval to refresh usage stats while on this page
+      const interval = setInterval(() => {
+        DeskThing.send({ type: 'requestUsageStats' });
+      }, 500); // Match the polling interval
+      
+      return () => clearInterval(interval);
+    }
+  }, [currentPage, connectionInfo?.status]);
 
   useEffect(() => {
     // If in dev mode, skip the real data setup
     if (isDev) {
-      console.log("=== RUNNING IN DEV MODE - Using TestSimpler ===");
+      console.log("=== RUNNING IN DEV MODE ===");
       return;
     }
 
@@ -70,6 +107,19 @@ const App: React.FC = () => {
       setTemperatureData(data.payload);
     });
 
+    // Listen for usage data
+    const removeUsageListener = DeskThing.on('usageData', (data) => {
+      if (invalid) return;
+      console.log("=== RECEIVED USAGE DATA ===", data);
+      
+      if (!data?.payload) {
+        console.warn("No usage data in payload");
+        return;
+      }
+      
+      setUsageData(data.payload);
+    });
+
     const fetchInitialData = async () => {
       console.log("=== REQUESTING INITIAL STATUS ===");
       try {
@@ -99,17 +149,52 @@ const App: React.FC = () => {
       invalid = true;
       removeStatusListener();
       removeTempListener();
+      removeUsageListener();
     };
   }, []);
 
   console.log("Current connectionInfo state:", connectionInfo);
   console.log("Current temperature data:", temperatureData);
+  console.log("Current usage data:", usageData);
 
-  // If in dev mode, use TestSimpler
+  // Dev mode - show navigation and test pages
   if (isDev) {
-    return <TestSimpler />;
+    return (
+      <div className="w-screen h-screen bg-slate-950 flex flex-col">
+        {/* Dev Navigation - Centered */}
+        <div className="bg-slate-900 border-b border-slate-700 p-4 flex justify-center items-center gap-4">
+          <span className="text-emerald-500 font-bold absolute left-4">DEV MODE</span>
+          <button
+            onClick={() => setCurrentPage('temperature')}
+            className={`px-6 py-2 rounded-lg font-semibold transition-colors ${
+              currentPage === 'temperature'
+                ? 'bg-blue-600 text-white'
+                : 'bg-slate-800 text-slate-300 hover:bg-slate-700'
+            }`}
+          >
+            Temperature
+          </button>
+          <button
+            onClick={() => setCurrentPage('usage')}
+            className={`px-6 py-2 rounded-lg font-semibold transition-colors ${
+              currentPage === 'usage'
+                ? 'bg-purple-600 text-white'
+                : 'bg-slate-800 text-slate-300 hover:bg-slate-700'
+            }`}
+          >
+            Usage Stats
+          </button>
+        </div>
+
+        {/* Content */}
+        <div className="flex-1">
+          {currentPage === 'temperature' ? <TestSimpler /> : <TestUsageStats />}
+        </div>
+      </div>
+    );
   }
 
+  // Production mode
   if (isLoading) {
     return (
       <div className="bg-slate-900 w-screen h-screen flex justify-center items-center">
@@ -119,8 +204,39 @@ const App: React.FC = () => {
   }
 
   return (
-    <div className="w-screen h-screen bg-slate-950">
-      <Simple connectionInfo={connectionInfo} temperatureData={temperatureData} />
+    <div className="w-screen h-screen bg-slate-950 flex flex-col">
+      {/* Production Navigation - Centered */}
+      <div className="bg-slate-900/50 border-b border-slate-700/30 p-2 flex justify-center items-center gap-2">
+        <button
+          onClick={() => setCurrentPage('temperature')}
+          className={`px-4 py-1.5 rounded-lg text-sm font-semibold transition-colors ${
+            currentPage === 'temperature'
+              ? 'bg-blue-600 text-white'
+              : 'bg-slate-800/50 text-slate-400 hover:bg-slate-700/50'
+          }`}
+        >
+          Temps
+        </button>
+        <button
+          onClick={() => setCurrentPage('usage')}
+          className={`px-4 py-1.5 rounded-lg text-sm font-semibold transition-colors ${
+            currentPage === 'usage'
+              ? 'bg-purple-600 text-white'
+              : 'bg-slate-800/50 text-slate-400 hover:bg-slate-700/50'
+          }`}
+        >
+          Usage
+        </button>
+      </div>
+
+      {/* Content */}
+      <div className="flex-1">
+        {currentPage === 'temperature' ? (
+          <Simple connectionInfo={connectionInfo} temperatureData={temperatureData} />
+        ) : (
+          <UsageStatsPage connectionInfo={connectionInfo} usageData={usageData} />
+        )}
+      </div>
     </div>
   );
 };
