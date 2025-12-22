@@ -1172,20 +1172,16 @@ public updateSettings(settings: any) {
       this.handleRequestError(errorMsg);
     }
   }
-
   public async requestNetworkAdapters() {
   if (this.connectionStatus !== 'connected') {
-    this.addLog('warn', 'Not connected to backend');
+    console.warn('Not connected to backend');
     return;
   }
-
   try {
     const response = await this.fetchWithTimeout(`${this.backendUrl}/api/network/adapters`);
-
     if (!response.ok) {
       throw new Error(`HTTP ${response.status}: ${response.statusText}`);
     }
-
     const data = await response.json();
     
     if (this.DeskThing) {
@@ -1195,15 +1191,18 @@ public updateSettings(settings: any) {
       });
     }
     
-    // Log the adapters so users can see them in the server logs
-    this.addLog('info', `Found ${data.count} network adapters:`);
+    // Just use console.error - it will be captured by DeskThing's Logger
+    console.error('╔════════════════════════════════════════════════════════════════╗');
+    console.error('║  AVAILABLE NETWORK ADAPTERS (Copy sensor index to settings)   ║');
+    console.error('╠════════════════════════════════════════════════════════════════╣');
     data.adapters.forEach((adapter: any) => {
-      this.addLog('info', `  └─ Index ${adapter.sensorIndex}: ${adapter.parentCustomName || adapter.parentName}`);
+      console.error(`║  Index ${adapter.sensorIndex}: ${adapter.parentCustomName || adapter.parentName}`);
     });
+    console.error('╚════════════════════════════════════════════════════════════════╝');
     
   } catch (error) {
     const errorMsg = error instanceof Error ? error.message : String(error);
-    this.addLog('error', `Failed to request network adapters: ${errorMsg}`);
+    console.error(`Failed to request network adapters: ${errorMsg}`);
     this.handleRequestError(errorMsg);
   }
 }
