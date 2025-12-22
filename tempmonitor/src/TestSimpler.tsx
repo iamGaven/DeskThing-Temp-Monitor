@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import Simple from "./simpler";
+import Simple from "./simplepage";
 import { ConnectionInfo } from "./types";
 
 interface TemperatureData {

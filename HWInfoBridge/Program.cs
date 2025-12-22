@@ -45,8 +45,6 @@ if (HWHash.Sensors.Count == 0)
 
 // Build web server
 var builder = WebApplication.CreateBuilder(args);
-// Configure JSON serialization
-
 
 // Configure logging to reduce verbosity
 builder.Logging.ClearProviders();
@@ -95,6 +93,13 @@ app.MapGet("/", () => Results.Text(
     "  GET /api/sensors/relevant  - Curated important sensors\n" +
     "  GET /api/temps             - All temperature sensors\n" +
     "  GET /api/temps/cpu-gpu     - CPU & GPU temps only\n" +
+    "  GET /api/temps/cpu         - CPU temperature only\n" +
+    "  GET /api/temps/gpu         - GPU temperature only\n" +
+    "  GET /api/usage             - All usage stats\n" +
+    "  GET /api/usage/cpu         - CPU utility only\n" +
+    "  GET /api/usage/memory-load - Memory load percentage only\n" +
+    "  GET /api/usage/memory-used - Memory used (GB) only\n" +
+    "  GET /api/usage/gpu         - GPU core load only\n" +
     "  GET /api/stats             - Performance stats"
 ));
 
@@ -161,20 +166,6 @@ app.MapGet("/api/temps", () =>
     });
 });
 
-
-// Stats
-app.MapGet("/api/stats", () =>
-{
-    var currentStats = HWHash.GetHWHashStats();
-    return Results.Json(new
-    {
-        collectionTime = currentStats.CollectionTime,
-        totalEntries = currentStats.TotalEntries,
-        totalCategories = currentStats.TotalCategories,
-        sensorsLoaded = HWHash.Sensors.Count
-    });
-});
-
 // CPU and GPU temperatures only
 app.MapGet("/api/temps/cpu-gpu", () =>
 {
@@ -212,7 +203,68 @@ app.MapGet("/api/temps/cpu-gpu", () =>
     });
 });
 
-// Hardware usage statistics (main usage metrics)
+// CPU temperature only
+app.MapGet("/api/temps/cpu", () =>
+{
+    var allSensors = HWHash.GetOrderedList();
+
+    var cpuPackage = allSensors
+        .FirstOrDefault(s => s.ReadingType == "Temperature" &&
+                            s.NameDefault == "CPU Package");
+
+    if (cpuPackage.NameDefault == null)
+    {
+        return Results.Json(new
+        {
+            
+            timestamp = DateTime.Now,
+            error = "CPU temperature sensor not found"
+        });
+    }
+
+    return Results.Json(new
+    {
+        timestamp = DateTime.Now,
+        name = "CPU Temp",
+        value = cpuPackage.ValueNow,
+        unit = cpuPackage.Unit,
+        min = cpuPackage.ValueMin,
+        max = cpuPackage.ValueMax,
+        avg = cpuPackage.ValueAvg
+    });
+});
+
+// GPU temperature only
+app.MapGet("/api/temps/gpu", () =>
+{
+    var allSensors = HWHash.GetOrderedList();
+
+    var gpuTemp = allSensors
+        .FirstOrDefault(s => s.ReadingType == "Temperature" &&
+                            s.NameDefault == "GPU Temperature");
+
+    if (gpuTemp.NameDefault == null)
+    {
+        return Results.Json(new
+        {
+            timestamp = DateTime.Now,
+            error = "GPU temperature sensor not found"
+        });
+    }
+
+    return Results.Json(new
+    {
+        timestamp = DateTime.Now,
+        name = gpuTemp.NameDefault,
+        value = gpuTemp.ValueNow,
+        unit = gpuTemp.Unit,
+        min = gpuTemp.ValueMin,
+        max = gpuTemp.ValueMax,
+        avg = gpuTemp.ValueAvg
+    });
+});
+
+// Hardware usage statistics (all usage metrics)
 app.MapGet("/api/usage", () =>
 {
     var relevantSensors = HWHash.GetRelevantList();
@@ -258,6 +310,266 @@ app.MapGet("/api/usage", () =>
             name = gpuCoreLoad.NameCustom,
             value = gpuCoreLoad.ValueNow,
             unit = gpuCoreLoad.Unit
+        } : null
+    });
+});
+
+// CPU utility only
+app.MapGet("/api/usage/cpu", () =>
+{
+    var allSensors = HWHash.GetOrderedList();
+
+    var totalCpuUtility = allSensors
+        .FirstOrDefault(s => s.NameDefault == "Total CPU Utility");
+
+    if (totalCpuUtility.NameDefault == null)
+    {
+        return Results.Json(new
+        {
+            timestamp = DateTime.Now,
+            error = "CPU utility sensor not found"
+        });
+    }
+
+    return Results.Json(new
+    {
+        timestamp = DateTime.Now,
+        name = totalCpuUtility.NameDefault,
+        value = totalCpuUtility.ValueNow,
+        unit = totalCpuUtility.Unit,
+        min = totalCpuUtility.ValueMin,
+        max = totalCpuUtility.ValueMax,
+        avg = totalCpuUtility.ValueAvg
+    });
+});
+
+// Memory load percentage only
+app.MapGet("/api/usage/memory-load", () =>
+{
+    var relevantSensors = HWHash.GetRelevantList();
+
+    var physicalMemoryLoad = relevantSensors
+        .FirstOrDefault(s => s.NameDefault == "Physical Memory Load");
+
+    if (physicalMemoryLoad.NameDefault == null)
+    {
+        return Results.Json(new
+        {
+            timestamp = DateTime.Now,
+            error = "Physical memory load sensor not found"
+        });
+    }
+
+    return Results.Json(new
+    {
+        timestamp = DateTime.Now,
+        name = "Memory Usage",
+        value = physicalMemoryLoad.ValueNow,
+        unit = physicalMemoryLoad.Unit,
+        min = physicalMemoryLoad.ValueMin,
+        max = physicalMemoryLoad.ValueMax,
+        avg = physicalMemoryLoad.ValueAvg
+    });
+});
+
+// Memory used (GB) only
+app.MapGet("/api/usage/memory-used", () =>
+{
+    var relevantSensors = HWHash.GetRelevantList();
+
+    var physicalMemoryUsed = relevantSensors
+        .FirstOrDefault(s => s.NameDefault == "Physical Memory Used");
+
+    if (physicalMemoryUsed.NameDefault == null)
+    {
+        return Results.Json(new
+        {
+            timestamp = DateTime.Now,
+            error = "Physical memory used sensor not found"
+        });
+    }
+
+    return Results.Json(new
+    {
+        timestamp = DateTime.Now,
+        name = physicalMemoryUsed.NameCustom ?? physicalMemoryUsed.NameDefault,
+        value = physicalMemoryUsed.ValueNow,
+        unit = physicalMemoryUsed.Unit,
+        min = physicalMemoryUsed.ValueMin,
+        max = physicalMemoryUsed.ValueMax,
+        avg = physicalMemoryUsed.ValueAvg
+    });
+});
+
+// GPU core load only
+app.MapGet("/api/usage/gpu", () =>
+{
+    var relevantSensors = HWHash.GetRelevantList();
+
+    var gpuCoreLoad = relevantSensors
+        .FirstOrDefault(s => s.NameDefault == "GPU Core Load");
+
+    if (gpuCoreLoad.NameDefault == null)
+    {
+        return Results.Json(new
+        {
+            timestamp = DateTime.Now,
+            error = "GPU core load sensor not found"
+        });
+    }
+
+    return Results.Json(new
+    {
+        timestamp = DateTime.Now,
+        name = "GPU Usage",
+        value = gpuCoreLoad.ValueNow,
+        unit = gpuCoreLoad.Unit,
+        min = gpuCoreLoad.ValueMin,
+        max = gpuCoreLoad.ValueMax,
+        avg = gpuCoreLoad.ValueAvg
+    });
+});
+
+// Stats
+app.MapGet("/api/stats", () =>
+{
+    var currentStats = HWHash.GetHWHashStats();
+    return Results.Json(new
+    {
+        collectionTime = currentStats.CollectionTime,
+        totalEntries = currentStats.TotalEntries,
+        totalCategories = currentStats.TotalCategories,
+        sensorsLoaded = HWHash.Sensors.Count
+    });
+});
+
+// Get list of all available network adapters
+app.MapGet("/api/network/adapters", () =>
+{
+    var allSensors = HWHash.GetOrderedList();
+
+    // Get all network adapters that have DL/UP rate sensors
+    var networkAdapters = allSensors
+        .Where(s => s.NameDefault == "Current DL rate" || s.NameDefault == "Current UP rate")
+        .Select(s => new
+        {
+            parentName = s.ParentNameDefault,
+            parentCustomName = s.ParentNameCustom,
+            parentInstance = s.ParentInstance,
+            sensorIndex = s.SensorIndex
+        })
+        .GroupBy(s => s.sensorIndex)
+        .Select(g => g.First())
+        .ToList();
+
+    return Results.Json(new
+    {
+        timestamp = DateTime.Now,
+        count = networkAdapters.Count,
+        adapters = networkAdapters
+    });
+});
+
+// Download rate for specific network adapter by sensor index
+app.MapGet("/api/network/download/{sensorIndex}", (int sensorIndex) =>
+{
+    var allSensors = HWHash.GetOrderedList();
+
+    var downloadRate = allSensors
+        .FirstOrDefault(s => s.NameDefault == "Current DL rate" && s.SensorIndex == sensorIndex);
+
+    if (downloadRate.NameDefault == null)
+    {
+        return Results.Json(new
+        {
+            timestamp = DateTime.Now,
+            error = $"Current DL rate sensor not found for adapter with sensor index {sensorIndex}"
+        });
+    }
+
+    return Results.Json(new
+    {
+        timestamp = DateTime.Now,
+        name = "Download Rate",
+        adapter = downloadRate.ParentNameCustom ?? downloadRate.ParentNameDefault,
+        value = downloadRate.ValueNow,
+        unit = downloadRate.Unit,
+        min = downloadRate.ValueMin,
+        max = downloadRate.ValueMax,
+        avg = downloadRate.ValueAvg
+    });
+});
+
+// Upload rate for specific network adapter by sensor index
+app.MapGet("/api/network/upload/{sensorIndex}", (int sensorIndex) =>
+{
+    var allSensors = HWHash.GetOrderedList();
+
+    var uploadRate = allSensors
+        .FirstOrDefault(s => s.NameDefault == "Current UP rate" && s.SensorIndex == sensorIndex);
+
+    if (uploadRate.NameDefault == null)
+    {
+        return Results.Json(new
+        {
+            timestamp = DateTime.Now,
+            error = $"Current UP rate sensor not found for adapter with sensor index {sensorIndex}"
+        });
+    }
+
+    return Results.Json(new
+    {
+        timestamp = DateTime.Now,
+        name = "Upload Rate",
+        adapter = uploadRate.ParentNameCustom ?? uploadRate.ParentNameDefault,
+        value = uploadRate.ValueNow,
+        unit = uploadRate.Unit,
+        min = uploadRate.ValueMin,
+        max = uploadRate.ValueMax,
+        avg = uploadRate.ValueAvg
+    });
+});
+
+// Get both DL and UP rates for specific network adapter
+app.MapGet("/api/network/rates/{sensorIndex}", (int sensorIndex) =>
+{
+    var allSensors = HWHash.GetOrderedList();
+
+    var downloadRate = allSensors
+        .FirstOrDefault(s => s.NameDefault == "Current DL rate" && s.SensorIndex == sensorIndex);
+
+    var uploadRate = allSensors
+        .FirstOrDefault(s => s.NameDefault == "Current UP rate" && s.SensorIndex == sensorIndex);
+
+    if (downloadRate.NameDefault == null && uploadRate.NameDefault == null)
+    {
+        return Results.Json(new
+        {
+            timestamp = DateTime.Now,
+            error = $"Network adapter with sensor index {sensorIndex} not found"
+        });
+    }
+
+    return Results.Json(new
+    {
+        timestamp = DateTime.Now,
+        adapter = downloadRate.ParentNameCustom ?? uploadRate.ParentNameCustom ??
+                  downloadRate.ParentNameDefault ?? uploadRate.ParentNameDefault,
+        download = downloadRate.NameDefault != null ? new
+        {
+            value = downloadRate.ValueNow,
+            unit = downloadRate.Unit,
+            min = downloadRate.ValueMin,
+            max = downloadRate.ValueMax,
+            avg = downloadRate.ValueAvg
+        } : null,
+        upload = uploadRate.NameDefault != null ? new
+        {
+            value = uploadRate.ValueNow,
+            unit = uploadRate.Unit,
+            min = uploadRate.ValueMin,
+            max = uploadRate.ValueMax,
+            avg = uploadRate.ValueAvg
         } : null
     });
 });
@@ -375,7 +687,7 @@ public class SensorHub : Hub
         _broadcastTimer = null;
     }
 
-    // Client can request full sensor data if needed
+    // Client can request full sensor data if neededa
     public async Task RequestFullSensors()
     {
         try
@@ -417,7 +729,4 @@ public class SensorHub : Hub
             Console.WriteLine($"⚠️  Error sending temps: {ex.Message}");
         }
     }
-
-
-
 }

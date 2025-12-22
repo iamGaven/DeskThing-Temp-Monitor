@@ -26,15 +26,97 @@ export type ServerStatus = {
   executablePath: string;
 };
 
+// Temperature metric from HWHash
+export type TemperatureMetric = {
+  name: string;
+  value: number;
+  unit: string;
+  min: number;
+  max: number;
+  avg?: number;
+};
+
+// Individual temperature data
+export type CpuTemperatureData = {
+  timestamp: string;
+  name: string;
+  value: number;
+  unit: string;
+  min: number;
+  max: number;
+  avg: number;
+};
+
+export type GpuTemperatureData = {
+  timestamp: string;
+  name: string;
+  value: number;
+  unit: string;
+  min: number;
+  max: number;
+  avg: number;
+};
+
+// Combined temperature data (existing endpoint)
+export type CombinedTemperatureData = {
+  timestamp: string;
+  cpu: TemperatureMetric | null;
+  gpu: TemperatureMetric | null;
+};
+
 // Usage metric from HWHash
 export type UsageMetric = {
   name: string;
   value: number;
   unit: string;
+  min?: number;
+  max?: number;
+  avg?: number;
 };
 
-// Usage data from /api/usage endpoint
-export type UsageData = {
+// Individual usage data types
+export type CpuUsageData = {
+  timestamp: string;
+  name: string;
+  value: number;
+  unit: string;
+  min: number;
+  max: number;
+  avg: number;
+};
+
+export type MemoryLoadData = {
+  timestamp: string;
+  name: string;
+  value: number;
+  unit: string;
+  min: number;
+  max: number;
+  avg: number;
+};
+
+export type MemoryUsedData = {
+  timestamp: string;
+  name: string;
+  value: number;
+  unit: string;
+  min: number;
+  max: number;
+  avg: number;
+};
+
+export type GpuUsageData = {
+  timestamp: string;
+  name: string;
+  value: number;
+  unit: string;
+  min: number;
+  max: number;
+  avg: number;
+};
+
+// Combined usage data (existing endpoint)
+export type CombinedUsageData = {
   timestamp: string;
   totalCpuUtility: UsageMetric | null;
   physicalMemoryLoad: UsageMetric | null;
@@ -43,7 +125,28 @@ export type UsageData = {
 };
 
 // Data types that can be subscribed to
-export type SubscriptionDataType = 'temperature' | 'usage' | 'stats';
+export type SubscriptionDataType = 
+  | 'temperature' 
+  | 'usage' 
+  | 'stats'
+  | 'cpu-temp'
+  | 'gpu-temp'
+  | 'cpu-usage'
+  | 'memory-load'
+  | 'memory-used'
+  | 'gpu-usage';
+
+// Settings payload for card configuration
+export type AppSettingsPayload = {
+  backendUrl?: string | { value: string };
+  autoConnect?: boolean | { value: boolean };
+  reconnectInterval?: number | { value: number };
+  maxLogs?: number | { value: number };
+  card1Type?: string | { value: string };
+  card2Type?: string | { value: string };
+  card3Type?: string | { value: string };
+  card4Type?: string | { value: string };
+};
 
 // Data sent to client from server
 export type ToClientData = 
@@ -64,8 +167,40 @@ export type ToClientData =
       payload: LogEntry[];
     }
   | {
+      type: 'settings';
+      payload: AppSettingsPayload;
+    }
+  | {
       type: 'usageData';
-      payload: UsageData;
+      payload: CombinedUsageData;
+    }
+  | {
+      type: 'cpuUsageData';
+      payload: CpuUsageData;
+    }
+  | {
+      type: 'memoryLoadData';
+      payload: MemoryLoadData;
+    }
+  | {
+      type: 'memoryUsedData';
+      payload: MemoryUsedData;
+    }
+  | {
+      type: 'gpuUsageData';
+      payload: GpuUsageData;
+    }
+  | {
+      type: 'temperatureData';
+      payload: CombinedTemperatureData;
+    }
+  | {
+      type: 'cpuTemperatureData';
+      payload: CpuTemperatureData;
+    }
+  | {
+      type: 'gpuTemperatureData';
+      payload: GpuTemperatureData;
     }
   | {
       type: 'sensorData';
@@ -82,10 +217,6 @@ export type ToClientData =
   | {
       type: 'relevantSensorData';
       payload: any; // Relevant sensor data from C# SignalR
-    }
-  | {
-      type: 'temperatureData';
-      payload: any; // Temperature data from C# SignalR
     }
   | {
       type: 'backendError';
@@ -125,12 +256,12 @@ export type GenericTransitData =
     }
   | {
       type: 'subscribe';
-      request: SubscriptionDataType; // Use 'request' field like 'get' does
+      request: SubscriptionDataType;
       payload?: string;
     }
   | {
       type: 'unsubscribe';
-      request: SubscriptionDataType; // Use 'request' field like 'get' does
+      request: SubscriptionDataType;
       payload?: string;
     }
   | {
@@ -148,6 +279,30 @@ export type GenericTransitData =
   | {
       type: 'requestTemperatures';
       payload?: string;
+    }
+  | {
+      type: 'requestCpuTemp';
+      payload?: string;
+    }
+  | {
+      type: 'requestGpuTemp';
+      payload?: string;
+    }
+  | {
+      type: 'requestCpuUsage';
+      payload?: string;
+    }
+  | {
+      type: 'requestMemoryLoad';
+      payload?: string;
+    }
+  | {
+      type: 'requestMemoryUsed';
+      payload?: string;
+    }
+  | {
+      type: 'requestGpuUsage';
+      payload?: string;
     };
 
 // App settings
@@ -158,4 +313,8 @@ export type BackendSettings = {
   serverExecutablePath: string;
   reconnectInterval: number;
   maxLogs: number;
+  card1Type?: string;
+  card2Type?: string;
+  card3Type?: string;
+  card4Type?: string;
 };
