@@ -1,8 +1,8 @@
 {
-  "id": "tempmonitor",
+  "id": "HWView",
   "isWebApp": true,
   "requires": [""],
-  "label": "Temp Monitor",
+  "label": "HWView",
   "version": "0.11.2",
   "version_code": "11.2",
   "compatible_server": ["11"],
