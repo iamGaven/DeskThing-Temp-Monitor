@@ -40,17 +40,6 @@ const SimplePage: React.FC<SimplePageProps> = ({ connectionInfo, settings, DeskT
     return () => clearInterval(interval);
   }, []);
 
-  // Auto-focus for keyboard events
-  useEffect(() => {
-    if (isDev) return;
-
-    console.log("=== SIMPLE: AUTO-FOCUSING PAGE FOR KEYBOARD EVENTS ===");
-    window.focus();
-    if (containerRef.current) {
-      containerRef.current.focus();
-    }
-    document.body.focus();
-  }, []);
 
   // Handle settings updates to configure cards
   useEffect(() => {

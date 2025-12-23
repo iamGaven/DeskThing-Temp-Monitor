@@ -29,7 +29,7 @@ const App: React.FC = () => {
         card1Type: { value: 'cpu-temp' },
         card2Type: { value: 'gpu-temp' },
         card3Type: { value: 'cpu-usage' },
-        card4Type: { value: 'gpu-usage' },
+        card4Type: { value: 'none' },
       });
       return;
     }

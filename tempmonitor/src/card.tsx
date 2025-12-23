@@ -145,11 +145,11 @@ const Card: React.FC<CardProps> = ({ dataType, data, isLoading = false, cardCoun
         icon: '⬇️',
         colorClass: 'text-sky-400',
         getGradient: (value: number) => {
-          if (value >= 100000) return 'from-violet-500 to-purple-600'; // 100+ MB/s
-          if (value >= 50000) return 'from-blue-500 to-indigo-600';    // 50+ MB/s
-          if (value >= 10000) return 'from-cyan-500 to-blue-600';      // 10+ MB/s
-          if (value >= 1000) return 'from-teal-500 to-cyan-600';       // 1+ MB/s
-          return 'from-emerald-500 to-teal-600';                        // < 1 MB/s
+          if (value >= 100000) return 'from-violet-500 to-purple-600';
+          if (value >= 50000) return 'from-blue-500 to-indigo-600';
+          if (value >= 10000) return 'from-cyan-500 to-blue-600';
+          if (value >= 1000) return 'from-teal-500 to-cyan-600';
+          return 'from-emerald-500 to-teal-600';
         },
         getGlow: (value: number) => {
           if (value >= 100000) return 'shadow-violet-500/30';
@@ -165,11 +165,11 @@ const Card: React.FC<CardProps> = ({ dataType, data, isLoading = false, cardCoun
         icon: '⬆️',
         colorClass: 'text-amber-400',
         getGradient: (value: number) => {
-          if (value >= 100000) return 'from-violet-500 to-purple-600'; // 100+ MB/s
-          if (value >= 50000) return 'from-orange-500 to-red-600';     // 50+ MB/s
-          if (value >= 10000) return 'from-amber-500 to-orange-600';   // 10+ MB/s
-          if (value >= 1000) return 'from-yellow-500 to-amber-600';    // 1+ MB/s
-          return 'from-emerald-500 to-teal-600';                        // < 1 MB/s
+          if (value >= 100000) return 'from-violet-500 to-purple-600';
+          if (value >= 50000) return 'from-orange-500 to-red-600';
+          if (value >= 10000) return 'from-amber-500 to-orange-600';
+          if (value >= 1000) return 'from-yellow-500 to-amber-600';
+          return 'from-emerald-500 to-teal-600';
         },
         getGlow: (value: number) => {
           if (value >= 100000) return 'shadow-violet-500/30';
@@ -192,44 +192,59 @@ const Card: React.FC<CardProps> = ({ dataType, data, isLoading = false, cardCoun
 
   const config = getCardConfig();
   const getSizeClasses = () => {
-    if (cardCount >= 4) {
-      // 4 CARDS LAYOUT - Compact sizing to fit all cards without scrolling
+  if (cardCount >= 4) {
+      // 4 CARDS LAYOUT - Compact sizing to prevent overlap
       return {
-        padding: 'p-3',                    // Card padding: 12px
-        label: 'text-xl md:text-2xl',      // "CPU", "GPU" label: 20px → 24px on medium screens
-        value: 'text-5xl md:text-6xl',     // Main value number "27", "36": 48px → 60px
-        unit: 'text-2xl md:text-3xl',      // Unit symbol "%", "°": 24px → 30px
-        name: 'text-xs',                   // Device name below value: 12px
-        minMaxLabel: 'text-[10px]',        // "Min"/"Max" labels: 10px
-        minMaxValue: 'text-xs',            // Min/Max values: 12px
-        gap: 'gap-3',                      // Space between Min/Max sections: 12px
-        margin: 'my-1'                     // Vertical margin around value: 4px
+        padding: 'p-3',
+        label: 'text-xl',
+        value: 'text-6xl',
+        unit: 'text-2xl',
+        name: 'text-xs',
+        minMaxLabel: 'text-md',
+        minMaxValue: 'text-xl',
+        minMaxLabelHorizontalGap: '16px',    // Horizontal gap between "Min" and "Max" labels
+        minMaxValueHorizontalGap: '16px',    // Horizontal gap between min and max values
+        minMaxVerticalGap: '4px',            // Vertical gap between label and value
+        minMaxHorizontalOffset: '0px',       // Horizontal offset (negative = left, positive = right)
+        mainLabelHorizontalOffset: '0px',    // Main label horizontal offset
+        mainLabelVerticalOffset: '0px',      // Main label vertical offset
+        margin: 'my-1'
       };
     } else if (cardCount === 3) {
-      // 3 CARDS LAYOUT - Medium sizing for balanced display
+      // 3 CARDS LAYOUT - LARGE sizing with bigger min/max
       return {
-        padding: 'p-4',                    // Card padding: 16px
-        label: 'text-2xl md:text-3xl',     // "CPU", "GPU" label: 24px → 30px on medium screens
-        value: 'text-6xl md:text-7xl',     // Main value number: 60px → 72px
-        unit: 'text-3xl md:text-4xl',      // Unit symbol: 30px → 36px
-        name: 'text-sm',                   // Device name: 14px
-        minMaxLabel: 'text-xs',            // "Min"/"Max" labels: 12px
-        minMaxValue: 'text-sm',            // Min/Max values: 14px
-        gap: 'gap-4',                      // Space between Min/Max sections: 16px
-        margin: 'my-2'                     // Vertical margin around value: 8px
+        padding: 'p-6',
+        label: 'text-4xl',
+        value: 'text-8xl',
+        unit: 'text-5xl',
+        name: 'text-lg',
+        minMaxLabel: 'text-2xl',
+        minMaxValue: 'text-4xl',
+        minMaxLabelHorizontalGap: '50px',    // Horizontal gap between "Min" and "Max" labels
+        minMaxValueHorizontalGap: '30px',    // Horizontal gap between min and max values
+        minMaxVerticalGap: '16px',           // Vertical gap between label and value
+        minMaxHorizontalOffset: '0px',       // Horizontal offset (negative = left, positive = right)
+        mainLabelHorizontalOffset: '0px',    // Main label horizontal offset
+        mainLabelVerticalOffset: '0px',      // Main label vertical offset
+        margin: 'my-3'
       };
     } else {
       // 1-2 CARDS LAYOUT - Large sizing for maximum impact and readability
       return {
-        padding: 'p-5',                    // Card padding: 20px
-        label: 'text-3xl md:text-4xl',     // "CPU", "GPU" label: 30px → 36px on medium screens
-        value: 'text-7xl md:text-8xl',     // Main value number: 72px → 96px
-        unit: 'text-4xl md:text-5xl',      // Unit symbol: 36px → 48px
-        name: 'text-base',                 // Device name: 16px
-        minMaxLabel: 'text-sm',            // "Min"/"Max" labels: 14px
-        minMaxValue: 'text-lg',            // Min/Max values: 18px
-        gap: 'gap-6',                      // Space between Min/Max sections: 24px
-        margin: 'my-2'                     // Vertical margin around value: 8px
+      padding: 'p-6',
+        label: 'text-4xl',
+        value: 'text-8xl',
+        unit: 'text-5xl',
+        name: 'text-lg',
+        minMaxLabel: 'text-2xl',
+        minMaxValue: 'text-4xl',
+        minMaxLabelHorizontalGap: '50px',    // Horizontal gap between "Min" and "Max" labels
+        minMaxValueHorizontalGap: '30px',    // Horizontal gap between min and max values
+        minMaxVerticalGap: '8px',            // Vertical gap between label and value
+        minMaxHorizontalOffset: '0px',       // Horizontal offset (negative = left, positive = right)
+        mainLabelHorizontalOffset: '0px',    // Main label horizontal offset
+        mainLabelVerticalOffset: '-10px',      // Main label vertical offset
+        margin: 'my-2'
       };
     }
   };
@@ -249,14 +264,13 @@ const Card: React.FC<CardProps> = ({ dataType, data, isLoading = false, cardCoun
 
   const gradient = config.getGradient(data.value);
   const glow = config.getGlow(data.value);
-
-  return (
+ return (
     <div className="group relative flex items-center justify-center h-full min-h-0">
       <div className={`absolute inset-0 bg-gradient-to-br ${gradient} opacity-20 blur-2xl group-hover:opacity-30 transition-opacity duration-500`}></div>
       <div className={`relative bg-gradient-to-br from-slate-900/80 to-slate-950/80 backdrop-blur-xl rounded-2xl ${sizes.padding} border border-slate-700/50 hover:border-slate-600/70 transition-all duration-300 shadow-lg ${glow} w-full h-full flex flex-col min-h-0`}>
-        <div className="flex flex-col items-center justify-center h-full min-h-0 overflow-hidden">
+        <div className="flex flex-col items-center justify-center h-full min-h-0 relative">
           {/* Label */}
-          <div className={`${config.colorClass} ${sizes.label} font-bold uppercase tracking-wider flex-shrink-0`}>
+          <div className={`${config.colorClass} ${sizes.label} font-bold uppercase tracking-wider flex-shrink-0`} style={{ position: 'relative', left: sizes.mainLabelHorizontalOffset, top: sizes.mainLabelVerticalOffset }}>
             {config.label}
           </div>
 
@@ -273,16 +287,22 @@ const Card: React.FC<CardProps> = ({ dataType, data, isLoading = false, cardCoun
 
           {/* Min/Max */}
           {data.min !== undefined && data.max !== undefined && (
-            <div className={`flex justify-center ${sizes.gap} text-slate-500 pt-1 mt-1 border-t border-slate-800 w-full flex-shrink-0`}>
-              <div className="text-center">
-                <div className={`text-slate-600 uppercase ${sizes.minMaxLabel}`}>Min</div>
-                <div className={`text-slate-300 font-semibold ${sizes.minMaxValue}`}>
+            <div className="flex flex-col items-center text-slate-500 pt-2 mt-2 border-t border-slate-800 w-full">
+              {/* Labels Row */}
+              <div className="flex justify-center w-full" style={{ marginLeft: sizes.minMaxHorizontalOffset }}>
+                <div className={`text-slate-600 uppercase ${sizes.minMaxLabel} leading-tight whitespace-nowrap`} style={{ marginRight: sizes.minMaxLabelHorizontalGap }}>Min</div>
+                <div className={`text-slate-600 uppercase ${sizes.minMaxLabel} leading-tight whitespace-nowrap`}>Max</div>
+              </div>
+              
+              {/* Vertical Gap */}
+              <div style={{ height: sizes.minMaxVerticalGap, width: '100%' }} />
+              
+              {/* Values Row */}
+              <div className="flex justify-center w-full" style={{ marginLeft: sizes.minMaxHorizontalOffset }}>
+                <div className={`text-slate-300 font-semibold ${sizes.minMaxValue} leading-tight whitespace-nowrap`} style={{ marginRight: sizes.minMaxValueHorizontalGap }}>
                   {Math.round(data.min)}{data.unit}
                 </div>
-              </div>
-              <div className="text-center">
-                <div className={`text-slate-600 uppercase ${sizes.minMaxLabel}`}>Max</div>
-                <div className={`text-slate-300 font-semibold ${sizes.minMaxValue}`}>
+                <div className={`text-slate-300 font-semibold ${sizes.minMaxValue} leading-tight whitespace-nowrap`}>
                   {Math.round(data.max)}{data.unit}
                 </div>
               </div>

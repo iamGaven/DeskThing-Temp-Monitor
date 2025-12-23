@@ -12,7 +12,6 @@ HWHash.SetDelay(500);
 
 // Launch HWHash
 Console.WriteLine("🚀 Launching HWHash...");
-
 if (!HWHash.Launch())
 {
     Console.WriteLine("\n❌ FAILED to launch HWHash!");
@@ -20,11 +19,8 @@ if (!HWHash.Launch())
     Console.WriteLine("  1. HWiNFO is running");
     Console.WriteLine("  2. Shared Memory Support is enabled");
     Console.WriteLine("  3. Sensors window is open\n");
-    Console.WriteLine("Press any key to exit...");
-    Console.ReadKey();
-    return;
+    Environment.Exit(1);  // Exit with error code
 }
-
 Console.WriteLine("✅ HWHash launched successfully!");
 
 // Wait for sensors to populate
